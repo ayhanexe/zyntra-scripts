@@ -1,5 +1,20 @@
 [
   {
+    "id": "youtube-media-downloader",
+    "name": "YouTube Media & Stream Downloader",
+    "version": "1.2.0",
+    "author": "Zyntra Community",
+    "description": "Adds 1-tap download buttons and stream quality variant grabber to YouTube mobile and desktop watch pages.",
+    "category": "Media",
+    "downloadUrl": "https://raw.githubusercontent.com/ayhanexe/zyntra-scripts/main/youtube-downloader.user.js",
+    "icon": "video",
+    "downloadsCount": "42.8k",
+    "rating": 4.9,
+    "updatedAt": 1718500000000,
+    "tags": ["youtube", "video", "media", "downloader", "sniffer"],
+    "fullDescription": "Seamlessly integrates directly with YouTube watch pages to intercept live media streams and inject direct 1-tap downloading into Zyntra multi-threaded transfer engine."
+  },
+  {
     "id": "universal-dark-reader",
     "name": "Forced OLED Dark Mode",
     "version": "1.1.0",

@@ -11,6 +11,7 @@ This repository hosts the public, community-driven userscripts and extension reg
 ```
 zyntra-scripts/
 ├── registry.json             # Official community extension catalog JSON
+├── youtube-downloader.user.js# YouTube Media & Stream Downloader
 ├── dark-reader.user.js       # Forced OLED Dark Mode
 ├── video-speed-master.user.js# HTML5 Video Speed Master
 ├── clean-reader.user.js      # Anti-Modal & Clean Reader
