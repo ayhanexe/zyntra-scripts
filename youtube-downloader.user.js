@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Media & Stream Downloader
 // @namespace    https://zyntra.app/scripts/community
-// @version      1.3.1
+// @version      1.3.2
 // @description  Adds 1-tap download buttons and stream quality variant grabber to YouTube mobile and desktop watch pages.
 // @author       Zyntra Community
 // @match        *://*.youtube.com/*
@@ -285,6 +285,96 @@
       header.appendChild(closeBtn);
       sheet.appendChild(header);
 
+      // 1. Fast Web Converter (SaveFrom - 1-Tap direct MP4 stream for Zyntra Sniffer)
+      var fastBtn = document.createElement('button');
+      fastBtn.style.cssText = [
+        'display: flex !important;',
+        'align-items: center !important;',
+        'justify-content: space-between !important;',
+        'width: 100% !important;',
+        'padding: 13px 16px !important;',
+        'background: linear-gradient(135deg, #10B981, #059669) !important;',
+        'border: 1px solid rgba(255, 255, 255, 0.25) !important;',
+        'border-radius: 14px !important;',
+        'color: #FFFFFF !important;',
+        'cursor: pointer !important;',
+        'margin-bottom: 8px !important;',
+        'box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;',
+        'box-sizing: border-box !important;',
+      ].join(' ');
+
+      var fastLeft = document.createElement('div');
+      fastLeft.style.cssText = 'display: flex !important; align-items: center !important; gap: 10px !important; font-size: 13px !important; font-weight: 700 !important;';
+      var fastIcon = document.createElement('span');
+      fastIcon.textContent = '🚀';
+      fastIcon.style.cssText = 'font-size: 16px !important;';
+      var fastLabel = document.createElement('span');
+      fastLabel.textContent = '1-Tap Fast Download (SaveFrom)';
+      fastLeft.appendChild(fastIcon);
+      fastLeft.appendChild(fastLabel);
+
+      var fastBadge = document.createElement('div');
+      fastBadge.textContent = 'FAST MP4';
+      fastBadge.style.cssText = 'font-size: 11px !important; font-weight: 700 !important; background: rgba(0, 0, 0, 0.3) !important; color: #FFFFFF !important; padding: 3px 8px !important; border-radius: 6px !important;';
+
+      fastBtn.appendChild(fastLeft);
+      fastBtn.appendChild(fastBadge);
+
+      fastBtn.onclick = function() {
+        backdrop.remove();
+        var targetUrl = videoId ? 'https://ssyoutube.com/watch?v=' + videoId : ('https://ssyoutube.com/' + encodeURIComponent(window.location.href));
+        window.location.href = targetUrl;
+      };
+
+      sheet.appendChild(fastBtn);
+
+      // 2. Audio MP3 Converter (Y2Mate)
+      var mp3Btn = document.createElement('button');
+      mp3Btn.style.cssText = [
+        'display: flex !important;',
+        'align-items: center !important;',
+        'justify-content: space-between !important;',
+        'width: 100% !important;',
+        'padding: 11px 16px !important;',
+        'background: rgba(255, 255, 255, 0.08) !important;',
+        'border: 1px solid rgba(255, 255, 255, 0.15) !important;',
+        'border-radius: 14px !important;',
+        'color: #FFFFFF !important;',
+        'cursor: pointer !important;',
+        'margin-bottom: 12px !important;',
+        'box-sizing: border-box !important;',
+      ].join(' ');
+
+      var mp3Left = document.createElement('div');
+      mp3Left.style.cssText = 'display: flex !important; align-items: center !important; gap: 10px !important; font-size: 13px !important; font-weight: 600 !important;';
+      var mp3Icon = document.createElement('span');
+      mp3Icon.textContent = '🎵';
+      var mp3Label = document.createElement('span');
+      mp3Label.textContent = 'Convert to MP3 (Y2Mate)';
+      mp3Left.appendChild(mp3Icon);
+      mp3Left.appendChild(mp3Label);
+
+      var mp3Badge = document.createElement('div');
+      mp3Badge.textContent = 'MP3';
+      mp3Badge.style.cssText = 'font-size: 11px !important; font-weight: 700 !important; background: rgba(239, 68, 68, 0.25) !important; color: #F87171 !important; padding: 3px 8px !important; border-radius: 6px !important;';
+
+      mp3Btn.appendChild(mp3Left);
+      mp3Btn.appendChild(mp3Badge);
+
+      mp3Btn.onclick = function() {
+        backdrop.remove();
+        var targetUrl = videoId ? 'https://www.y2mate.com/youtube/' + videoId : ('https://www.y2mate.com/en/search/' + encodeURIComponent(window.location.href));
+        window.location.href = targetUrl;
+      };
+
+      sheet.appendChild(mp3Btn);
+
+      // Section divider / label
+      var rawSectionLabel = document.createElement('div');
+      rawSectionLabel.textContent = 'Direct Intercept Streams:';
+      rawSectionLabel.style.cssText = 'font-size: 11px !important; font-weight: 600 !important; color: #A1A1AA !important; margin-bottom: 8px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;';
+      sheet.appendChild(rawSectionLabel);
+
       // Variants List
       var listContainer = document.createElement('div');
       listContainer.style.cssText = 'display: flex !important; flex-direction: column !important; gap: 8px !important; margin-bottom: 14px !important;';
@@ -336,6 +426,7 @@
               window.zyntraBridge.enqueueDownload({
                 url: v.url,
                 filename: videoTitle.replace(/[/\\?%*:|"<>]/g, '_') + '.' + (v.container || 'mp4'),
+                fileSizeBytes: v.sizeBytes,
                 threads: 8,
               });
             } else {
