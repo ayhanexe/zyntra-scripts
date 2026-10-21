@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Media & Stream Downloader
 // @namespace    https://zyntra.app/scripts/community
-// @version      1.4.0
+// @version      1.4.1
 // @description  Adds 1-tap download buttons and stream quality variant grabber to YouTube mobile and desktop watch pages.
 // @author       Zyntra Community
 // @match        *://*.youtube.com/*
@@ -231,40 +231,22 @@
       }
     } catch (e) {}
 
-    return variants;
+    // Web/mobile-web player URLs without a PO token are refused (HTTP 403) to every client
+    // except YouTube's own player, so offering them only produces failed downloads.
+    return variants.filter(function(v) {
+      return v.protocol === 'HLS' || !isPlayerOnlyUrl(v.url);
+    });
   }
 
-  function buildFallbackVariants() {
-    var variants = [];
+  function isPlayerOnlyUrl(url) {
     try {
-      var videoEl = document.querySelector('video');
-      var fallbackUrl = (videoEl && videoEl.currentSrc) || window.location.href;
-      variants.push(
-        {
-          url: fallbackUrl,
-          qualityLabel: '1080p Full HD MP4',
-          container: 'mp4',
-          mimeType: 'video/mp4',
-          protocol: 'HTTP',
-        },
-        {
-          url: fallbackUrl,
-          qualityLabel: '720p HD MP4',
-          container: 'mp4',
-          mimeType: 'video/mp4',
-          protocol: 'HTTP',
-        },
-        {
-          url: fallbackUrl,
-          qualityLabel: 'Audio Track (M4A / MP3)',
-          container: 'm4a',
-          mimeType: 'audio/mp4',
-          protocol: 'HTTP',
-        }
-      );
-    } catch (e) {}
-
-    return variants;
+      var u = new URL(url);
+      if (!/googlevideo\.com$/i.test(u.hostname)) return false;
+      var client = (u.searchParams.get('c') || '').toUpperCase();
+      return !u.searchParams.get('pot') && (client === 'WEB' || client === 'MWEB' || client === 'WEB_REMIX');
+    } catch (e) {
+      return true; // not even a valid http(s) URL (e.g. blob:)
+    }
   }
 
   function showDownloadModal(videoId, videoTitle, variants) {
@@ -440,6 +422,13 @@
       var listContainer = document.createElement('div');
       listContainer.style.cssText = 'display: flex !important; flex-direction: column !important; gap: 8px !important; margin-bottom: 14px !important;';
 
+      if (variants.length === 0) {
+        var notice = document.createElement('div');
+        notice.textContent = 'YouTube bu videonun birbaşa yüklənməsinə icazə vermir: linklər yalnız YouTube pleyerinin özü üçündür (HTTP 403).';
+        notice.style.cssText = 'font-size: 13px !important; line-height: 1.4 !important; color: #FCA5A5 !important; background: rgba(239, 68, 68, 0.12) !important; border: 1px solid rgba(239, 68, 68, 0.35) !important; border-radius: 12px !important; padding: 12px 14px !important;';
+        listContainer.appendChild(notice);
+      }
+
       variants.forEach(function(v) {
         var itemBtn = document.createElement('button');
         itemBtn.style.cssText = [
@@ -602,10 +591,9 @@
       var videoId = getVideoId();
       var videoTitle = findVideoTitle();
       var variants = extractStreamVariants(videoId, videoTitle);
-      if (variants.length === 0) variants = buildFallbackVariants();
 
-      // Always register with Zyntra native bridge
-      registerVariants(videoId, videoTitle, variants);
+      // Never invent variants: video.currentSrc is a page-internal blob: URL that cannot be downloaded
+      if (variants.length > 0) registerVariants(videoId, videoTitle, variants);
 
       // Show quality picker modal
       showDownloadModal(videoId, videoTitle, variants);

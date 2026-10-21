@@ -2,7 +2,7 @@
   {
     "id": "youtube-media-downloader",
     "name": "YouTube Media & Stream Downloader",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "author": "Zyntra Community",
     "description": "Adds 1-tap download buttons, instant SaveFrom/Y2Mate fast converters, and stream quality variant grabber to YouTube watch pages.",
     "category": "Media",
