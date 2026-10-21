@@ -2,7 +2,7 @@
   {
     "id": "youtube-media-downloader",
     "name": "YouTube Media & Stream Downloader",
-    "version": "1.3.2",
+    "version": "1.4.0",
     "author": "Zyntra Community",
     "description": "Adds 1-tap download buttons, instant SaveFrom/Y2Mate fast converters, and stream quality variant grabber to YouTube watch pages.",
     "category": "Media",
@@ -10,7 +10,7 @@
     "icon": "video",
     "downloadsCount": "43.1k",
     "rating": 4.9,
-    "updatedAt": 1729463500000,
+    "updatedAt": 1792540800000,
     "tags": ["youtube", "video", "media", "downloader", "sniffer"],
     "fullDescription": "Seamlessly integrates directly with YouTube watch pages to intercept live media streams and inject direct 1-tap downloading into Zyntra multi-threaded transfer engine."
   },
