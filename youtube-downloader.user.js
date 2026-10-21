@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Media & Stream Downloader
 // @namespace    https://zyntra.app/scripts/community
-// @version      1.3.2
+// @version      1.4.0
 // @description  Adds 1-tap download buttons and stream quality variant grabber to YouTube mobile and desktop watch pages.
 // @author       Zyntra Community
 // @match        *://*.youtube.com/*
@@ -94,22 +94,60 @@
     }
   }
 
+  // Audio itags paired with video-only adaptive streams, best first, per container
+  var AUDIO_ITAGS_BY_CONTAINER = {
+    mp4: [140, 141, 139],
+    webm: [251, 250, 249],
+  };
+
+  var AUDIO_LABELS = {
+    140: 'Audio Track (M4A / 128kbps)',
+    251: 'Audio Track (WebM / Opus 160kbps)',
+  };
+
+  function parseSize(fmt) {
+    return fmt && fmt.contentLength ? parseInt(fmt.contentLength, 10) : undefined;
+  }
+
+  function baseMime(fmt) {
+    return fmt && fmt.mimeType ? fmt.mimeType.split(';')[0].trim() : '';
+  }
+
+  function getPlayerResponse(videoId) {
+    var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+    var candidates = [];
+    try {
+      if (player && typeof player.getPlayerResponse === 'function') {
+        candidates.push(player.getPlayerResponse());
+      }
+    } catch (e) {}
+    if (window.ytInitialPlayerResponse) candidates.push(window.ytInitialPlayerResponse);
+
+    var firstWithData = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var pr = candidates[i];
+      if (!pr || !pr.streamingData) continue;
+      // After SPA navigation ytInitialPlayerResponse can still describe the previous video
+      if (!videoId || (pr.videoDetails && pr.videoDetails.videoId === videoId)) return pr;
+      if (!firstWithData) firstWithData = pr;
+    }
+    return firstWithData;
+  }
+
+  function pickAudioFor(container, audioFormats) {
+    var itags = AUDIO_ITAGS_BY_CONTAINER[container] || [];
+    for (var i = 0; i < itags.length; i++) {
+      for (var j = 0; j < audioFormats.length; j++) {
+        if (audioFormats[j].itag === itags[i]) return audioFormats[j];
+      }
+    }
+    return null;
+  }
+
   function extractStreamVariants(videoId, videoTitle) {
     var variants = [];
     try {
-      var player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-      var playerResponse = null;
-
-      try {
-        if (player && typeof player.getPlayerResponse === 'function') {
-          playerResponse = player.getPlayerResponse();
-        }
-      } catch (e) {}
-
-      if (!playerResponse && window.ytInitialPlayerResponse) {
-        playerResponse = window.ytInitialPlayerResponse;
-      }
-
+      var playerResponse = getPlayerResponse(videoId);
       var streamingData = playerResponse && playerResponse.streamingData;
       if (streamingData) {
         // 1. HLS Master Stream
@@ -134,73 +172,96 @@
                 container: 'mp4',
                 mimeType: fmt.mimeType ? fmt.mimeType.split(';')[0] : 'video/mp4',
                 protocol: 'HTTP',
-                sizeBytes: fmt.contentLength ? parseInt(fmt.contentLength, 10) : undefined,
+                itag: fmt.itag,
+                sizeBytes: parseSize(fmt),
               });
             }
           });
         }
 
-        // 3. Adaptive formats (high-res video + audio streams)
+        // 3. Adaptive formats: video-only streams (MP4 / WebM VP9) paired with a matching audio
+        //    stream so Zyntra can mux them natively, plus standalone audio tracks
         if (Array.isArray(streamingData.adaptiveFormats)) {
-          streamingData.adaptiveFormats.forEach(function(fmt) {
-            if (fmt && fmt.url) {
-              var isAudio = fmt.mimeType && fmt.mimeType.indexOf('audio/') !== -1;
-              var isMp4Video = fmt.mimeType && fmt.mimeType.indexOf('video/mp4') !== -1;
+          var adaptive = streamingData.adaptiveFormats.filter(function(fmt) { return fmt && fmt.url; });
+          var audioFormats = adaptive.filter(function(fmt) { return baseMime(fmt).indexOf('audio/') === 0; });
+          var videoFormats = adaptive.filter(function(fmt) {
+            var mime = baseMime(fmt);
+            // AV1 is skipped: Android's MediaMuxer cannot write it on most devices
+            return (mime === 'video/mp4' || mime === 'video/webm') && fmt.height && fmt.mimeType.indexOf('av01') === -1;
+          });
 
-              if (isAudio && fmt.itag === 140) {
-                variants.push({
-                  url: fmt.url,
-                  qualityLabel: 'Audio Track (M4A / 128kbps)',
-                  container: 'm4a',
-                  mimeType: 'audio/mp4',
-                  protocol: 'HTTP',
-                  sizeBytes: fmt.contentLength ? parseInt(fmt.contentLength, 10) : undefined,
-                });
-              } else if (isMp4Video && fmt.height && fmt.height >= 720) {
-                variants.push({
-                  url: fmt.url,
-                  qualityLabel: (fmt.qualityLabel || fmt.height + 'p') + ' Stream (MP4)',
-                  container: 'mp4',
-                  mimeType: 'video/mp4',
-                  protocol: 'HTTP',
-                  sizeBytes: fmt.contentLength ? parseInt(fmt.contentLength, 10) : undefined,
-                });
-              }
-            }
+          videoFormats.sort(function(a, b) {
+            if (b.height !== a.height) return b.height - a.height;
+            if ((b.fps || 0) !== (a.fps || 0)) return (b.fps || 0) - (a.fps || 0);
+            return baseMime(a) === 'video/mp4' ? -1 : 1;
+          });
+
+          videoFormats.forEach(function(fmt) {
+            var container = baseMime(fmt) === 'video/webm' ? 'webm' : 'mp4';
+            var audio = pickAudioFor(container, audioFormats);
+            var label = (fmt.qualityLabel || fmt.height + 'p') + (container === 'webm' ? ' (WebM VP9)' : ' (MP4)');
+            variants.push({
+              url: fmt.url,
+              qualityLabel: label + (audio ? ' (Video+Audio)' : ' (Video only)'),
+              container: container,
+              mimeType: baseMime(fmt),
+              protocol: 'HTTP',
+              itag: fmt.itag,
+              sizeBytes: parseSize(fmt),
+              audioUrl: audio ? audio.url : undefined,
+              audioSizeBytes: audio ? parseSize(audio) : undefined,
+              audioMimeType: audio ? baseMime(audio) : undefined,
+            });
+          });
+
+          [140, 251].forEach(function(itag) {
+            var fmt = audioFormats.filter(function(a) { return a.itag === itag; })[0];
+            if (!fmt) return;
+            variants.push({
+              url: fmt.url,
+              qualityLabel: AUDIO_LABELS[itag],
+              container: itag === 140 ? 'm4a' : 'webm',
+              mimeType: baseMime(fmt),
+              protocol: 'HTTP',
+              itag: itag,
+              sizeBytes: parseSize(fmt),
+            });
           });
         }
       }
     } catch (e) {}
 
-    // Default fallback formats
+    return variants;
+  }
+
+  function buildFallbackVariants() {
+    var variants = [];
     try {
       var videoEl = document.querySelector('video');
       var fallbackUrl = (videoEl && videoEl.currentSrc) || window.location.href;
-      if (variants.length === 0) {
-        variants.push(
-          {
-            url: fallbackUrl,
-            qualityLabel: '1080p Full HD MP4',
-            container: 'mp4',
-            mimeType: 'video/mp4',
-            protocol: 'HTTP',
-          },
-          {
-            url: fallbackUrl,
-            qualityLabel: '720p HD MP4',
-            container: 'mp4',
-            mimeType: 'video/mp4',
-            protocol: 'HTTP',
-          },
-          {
-            url: fallbackUrl,
-            qualityLabel: 'Audio Track (M4A / MP3)',
-            container: 'm4a',
-            mimeType: 'audio/mp4',
-            protocol: 'HTTP',
-          }
-        );
-      }
+      variants.push(
+        {
+          url: fallbackUrl,
+          qualityLabel: '1080p Full HD MP4',
+          container: 'mp4',
+          mimeType: 'video/mp4',
+          protocol: 'HTTP',
+        },
+        {
+          url: fallbackUrl,
+          qualityLabel: '720p HD MP4',
+          container: 'mp4',
+          mimeType: 'video/mp4',
+          protocol: 'HTTP',
+        },
+        {
+          url: fallbackUrl,
+          qualityLabel: 'Audio Track (M4A / MP3)',
+          container: 'm4a',
+          mimeType: 'audio/mp4',
+          protocol: 'HTTP',
+        }
+      );
     } catch (e) {}
 
     return variants;
@@ -427,6 +488,11 @@
                 url: v.url,
                 filename: videoTitle.replace(/[/\\?%*:|"<>]/g, '_') + '.' + (v.container || 'mp4'),
                 fileSizeBytes: v.sizeBytes,
+                mimeType: v.mimeType,
+                // Video-only adaptive streams carry their paired audio; Zyntra muxes them natively
+                audioUrl: v.audioUrl,
+                audioSizeBytes: v.audioSizeBytes,
+                audioMimeType: v.audioMimeType,
                 threads: 8,
               });
             } else {
@@ -495,6 +561,35 @@
     }
   }
 
+  function registerVariants(videoId, videoTitle, variants) {
+    if (window.zyntraBridge && typeof window.zyntraBridge.registerMedia === 'function') {
+      window.zyntraBridge.registerMedia({
+        title: videoTitle,
+        thumbnail: videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : null,
+        scriptName: 'YouTube Media Downloader',
+        variants: variants,
+      });
+    }
+  }
+
+  // Called by Zyntra's hidden link-refresher WebView to get freshly signed stream URLs.
+  // Re-reads the player response and registers its variants without opening the modal.
+  // Returns how many variants were registered (0 while the player response is not ready yet;
+  // Zyntra keeps calling until it finds a match).
+  window.__zyntraRequestMedia = function() {
+    try {
+      var videoId = getVideoId();
+      var videoTitle = findVideoTitle();
+      var variants = extractStreamVariants(videoId, videoTitle);
+      if (variants.length === 0) return 0;
+      registerVariants(videoId, videoTitle, variants);
+      return variants.length;
+    } catch (e) {
+      console.warn('[Zyntra Request Media Error]', e);
+      return 0;
+    }
+  };
+
   function handleTriggerClick(e) {
     if (e) {
       try {
@@ -507,16 +602,10 @@
       var videoId = getVideoId();
       var videoTitle = findVideoTitle();
       var variants = extractStreamVariants(videoId, videoTitle);
+      if (variants.length === 0) variants = buildFallbackVariants();
 
       // Always register with Zyntra native bridge
-      if (window.zyntraBridge && typeof window.zyntraBridge.registerMedia === 'function') {
-        window.zyntraBridge.registerMedia({
-          title: videoTitle,
-          thumbnail: videoId ? 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg' : null,
-          scriptName: 'YouTube Media Downloader',
-          variants: variants,
-        });
-      }
+      registerVariants(videoId, videoTitle, variants);
 
       // Show quality picker modal
       showDownloadModal(videoId, videoTitle, variants);
